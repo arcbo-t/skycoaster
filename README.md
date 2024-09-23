@@ -1,6 +1,6 @@
 # Niñalandia Skycoaster
 
-A VR-compatible 3D roller coaster made in Blender and Three.js. Take a ride through the post-apocopyptic, queer futurist utopia of Niñalandia. 
+A VR-compatible 3D roller coaster made in Blender and Three.js. Take a ride through the post-apocalyptic, queer futurist utopia of Niñalandia. 
 
 ## Installation
 
@@ -14,6 +14,6 @@ cd skycoaster
 
 ### To View in VR
 
-1. Upload the repo directory to a web server using FPT/SFTP
+1. Upload the repo directory to a web server using FTP/SFTP
 2. Navigate to the address in your VR headset's native browser
 3. Select the 'Enter VR' button. 

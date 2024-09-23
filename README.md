@@ -1,6 +1,12 @@
 # Niñalandia Skycoaster
 
+![Screenshot](assets/images/screenshot1.jpg)
+
 A VR-compatible 3D roller coaster made in Blender and Three.js. Take a ride through the post-apocalyptic, queer futurist utopia of Niñalandia. 
+
+## Live Demo
+
+Click [here](https://btevc.net/xRamp?_bh=bowT&_px=skycoaster) to ride.
 
 ## Installation
 

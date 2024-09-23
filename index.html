@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>Niñalandia Skycoaster</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+		<link type="text/css" rel="stylesheet" href="assets/styles/main.css?v=1.1">
+        <script
+            src="assets/scripts/jquery/jquery-3.7.1.min.js">
+        </script>
+	</head>
+	<body>
+        <video id="video" loop muted crossOrigin="anonymous" playsinline style="display:none">
+			<source src="assets/textures/ninacoaster_sky.mp4">
+		</video>
+        <div id="cover">
+            <div class="content">
+                <img src="assets/images/FrontPageLogo.png" />
+                <img id="spinner" src="assets/images/rainbow.gif" />
+                <div id="loading">Loading scene...</div>
+            </div>
+        </div>
+		<script type="importmap">
+			{
+                "imports": {
+                    "three": "./assets/scripts/three/build/three.module.js",
+                    "three/addons/": "./assets/scripts/three/examples/jsm/"
+                }
+            }
+		</script>
+		<script type="module">
+            
+            // Import THREE JavaScript Assets (Custom and Stock)
+
+			import * as THREE from 'three';
+			import {
+				RollerCoasterGeometry,
+				RollerCoasterShadowGeometry,
+				RollerCoasterLiftersGeometry,
+				TreesGeometry,
+				SkyGeometry
+			} from './assets/scripts/three.x/RollerCoaster.js';
+			import { VRButton } from './assets/scripts/three.x/VRButton.js';
+            import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.js';
+			import { XRHandModelFactory } from 'three/addons/webxr/XRHandModelFactory.js';
+            import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+            import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+            import { Water as Water } from 'three/addons/objects/Water.js';
+			import { Sky } from 'three/addons/objects/Sky.js';
+            
+            // Initialize GLTFLoader and Load Checker
+
+            let loader = new GLTFLoader();
+            let allLoaded = false;
+            let loaded = {
+                glb: false,
+                skyVid: false,
+                water: false
+            }
+            let checkLoaded = setInterval(function() {
+                if (video.readyState >= 3) { 
+                    loaded.skyVid = true;
+                }
+                if (Object.values(loaded).every(status => status === true)) {
+                    clearInterval(checkLoaded);
+                    allLoaded = true;
+                    video.play();
+                    $('#cover').fadeOut(1000)
+                }
+            }, 1000)
+            
+            // Add Video Event Handlers
+
+            const video = document.getElementById( 'video' );
+            video.addEventListener('canplaythrough', function() {
+                loaded.skyVid = true;
+            });
+            video.addEventListener('error', function(e) {
+                console.error('Error loading video:', e);
+            });
+            video.addEventListener('loadeddata', function() {
+                console.log('Initial video data is loaded');
+            });
+
+            // Load 3D Assets from GLB
+
+            loader.load('assets/models/ninacoaster.glb', (gltf) => { 
+                
+                // Mark GLB Assets as Loaded
+
+                loaded.glb = true;
+                $('#loading').html('Loading water...')
+                console.log(gltf.scene.children) 
+
+                // Set Clock
+                
+                const clock = new THREE.Clock();
+
+                // Establish Scene
+
+                const emptyScene = new THREE.Scene();
+                const scene = new THREE.Scene();
+                scene.background = new THREE.Color( 0x00000 );
+
+                // Set Up Camera
+
+                const train = new THREE.Object3D();
+                scene.add( train );
+                const camera = new THREE.PerspectiveCamera( 50, window.innerWidth / window.innerHeight, 0.1, 500 );
+                train.add( camera );
+
+                // Prepare GLB Objects and Add to THREE Scene
+
+                gltf.scene.traverse((child) => {
+                    if (child.isMesh) {
+                        child.frustumCulled = false;
+                    }
+                });
+                scene.add( gltf.scene );
+
+                // Start GLB Animations
+
+                const animations = gltf.animations;
+                let mixer; 
+                if (animations && animations.length) {
+                    mixer = new THREE.AnimationMixer(gltf.scene);
+                    animations.forEach((clip) => mixer.clipAction(clip).play());
+                }
+
+                // Establish Lighting
+
+                const nightLight1 = gltf.scene.children.find(c => c.name === "Point");
+                const nightLight2 = gltf.scene.children.find(c => c.name === "Point001");
+                nightLight1.intensity = 1
+                nightLight2.intensity = 1
+                const light = new THREE.AmbientLight( 0xe7e7e7, 0 );
+                scene.add( light );
+
+                // Initialize Reusable Object Variables
+
+                let mesh, material, geometry;
+
+                // Add Skybox
+                
+                geometry = new THREE.SphereGeometry( 5, 60, 40 );
+				geometry.scale( -80, 80, 80 ); 
+				const texture = new THREE.VideoTexture(video);
+                texture.minFilter = THREE.LinearFilter;
+                texture.magFilter = THREE.LinearFilter;
+                texture.generateMipmaps = false;
+                texture.needsUpdate = true;
+				texture.colorSpace = THREE.SRGBColorSpace;
+				material = new THREE.MeshBasicMaterial( { map: texture } );
+				const skyboxMesh = new THREE.Mesh( geometry, material );
+                skyboxMesh.position.set(0, 0, 0);
+				scene.add( skyboxMesh );
+
+                // Add Water
+
+				const waterGeometry = new THREE.PlaneGeometry( 2000, 2000 );
+                const textureLoader = new THREE.TextureLoader();
+                const flowMap = textureLoader.load( 'assets/textures/water/Water_1_M_Flow.jpg', function ( texture ) {
+                    loaded.water = true;
+                    $('#loading').html('Finishing...');
+                });
+				const helperGeometry = new THREE.PlaneGeometry( 20, 20 );
+				const helperMaterial = new THREE.MeshBasicMaterial( { map: flowMap } );
+				const helper = new THREE.Mesh( helperGeometry, helperMaterial );
+				helper.position.y = 1.01;
+				helper.rotation.x = Math.PI * - 0.5;
+				helper.visible = false;
+				scene.add( helper );
+				const water = new Water(
+					waterGeometry,
+					{
+						textureWidth: 512,
+						textureHeight: 512,
+						waterNormals: new THREE.TextureLoader().load('assets/textures/water/waternormals.jpg', function ( texture ) {
+                            texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+						} ),
+						sunDirection: new THREE.Vector3(),
+						sunColor: 0xffffff,
+						waterColor: 0x620066,
+						distortionScale: 3.7,
+						fog: true,
+                        reflectivity: 1 
+					}
+				);
+                loaded.water = true;
+                water.visible = true
+                water.position.y = 2;
+                water.rotation.x = Math.PI * - 0.5;
+                water.material.side = THREE.DoubleSide;
+                water.renderOrder = 1;
+				scene.add( water );
+
+                // Initialize Roller Coaster Curve from GLB Bezier Curve
+
+                let curveMesh = gltf.scene.children.find(c => c.name === "BezierCurve001"); 
+                curveMesh.visible = false;
+                let vertices = curveMesh.geometry.attributes.position.array;
+                let curvePoints = [];
+                for (let i = 0; i < vertices.length; i += 3) {
+                    curvePoints.push(new THREE.Vector3(vertices[i], vertices[i + 1], vertices[i + 2]));
+                }
+                const spline = new THREE.CatmullRomCurve3(curvePoints);
+                spline.tension = 1;
+                const curve = ( function () {
+                    const vector = new THREE.Vector3();
+                    const vector2 = new THREE.Vector3();
+                    return {
+                        getPointAt: function(t) {
+                            return spline.getPointAt(t);
+                        },
+                        getTangentAt: function(t) {
+                            return spline.getTangentAt(t);
+                        }
+                    };
+                } )();
+
+                // Add Roller Coaster Geometry
+
+                geometry = new RollerCoasterGeometry( curve, 1500 );
+                material = new THREE.MeshPhongMaterial( {
+                    vertexColors: true,
+                } );
+                mesh = new THREE.Mesh( geometry, material );
+                scene.add( mesh );
+
+                // Add Roller Coaster Lifter Geometry
+
+                geometry = new RollerCoasterLiftersGeometry( curve, 100 );
+                material = new THREE.MeshPhongMaterial();
+                mesh = new THREE.Mesh( geometry, material );
+                mesh.position.y = -.1;
+                scene.add( mesh );
+
+                // Add Roller Coaster Shadows
+
+                geometry = new RollerCoasterShadowGeometry( curve, 500 );
+                material = new THREE.MeshBasicMaterial( {
+                    color: 0x305000, depthWrite: false, transparent: true
+                } );
+                mesh = new THREE.Mesh( geometry, material );
+                mesh.position.y = 0.1;
+                scene.add( mesh );
+
+                // Set Up Renderer
+
+                const renderer = new THREE.WebGLRenderer( { antialias: true } );
+                renderer.setPixelRatio( window.devicePixelRatio );
+                renderer.setSize( window.innerWidth, window.innerHeight );
+                renderer.xr.enabled = true;
+                renderer.xr.setReferenceSpaceType( 'local' );
+                document.body.appendChild( renderer.domElement );
+                document.body.appendChild( VRButton.createButton( renderer ) );
+
+                // Establish Activity Checks for VR Headset Power Usage Managment
+
+                let lastRotation = new THREE.Vector3(); 
+                let lastActivityTime = performance.now();
+                let inactivityTimeout = 1000; 
+                let movementThreshold = 0.001; 
+                let checkInterval = 3000; 
+                let timeSinceLastCheck = 0;
+                let animationLoopRunning = true;
+                function checkHeadsetActivity() {
+                    if (VRButton.sessionIsActive) {
+                        const deltaTime = clock.getDelta(); 
+                        timeSinceLastCheck += deltaTime * 1000;           
+                        if (timeSinceLastCheck >= checkInterval) {
+                            timeSinceLastCheck = 0;
+                            let currentRotation = new THREE.Vector3().setFromEuler(camera.rotation);
+                            let rotationDifference = currentRotation.distanceTo(lastRotation);
+                            let movementThreshold = 0.001;
+                            if (rotationDifference > movementThreshold) {
+                                lastActivityTime = performance.now(); 
+                                if (!animationLoopRunning) animationLoopRunning = true
+                            } else {
+                                let timeSinceLastActivity = (performance.now() - lastActivityTime) / 10;
+                                if (timeSinceLastActivity > inactivityTimeout) animationLoopRunning = false
+                            }
+                            lastRotation.copy(currentRotation);
+                        }
+                    }
+                    
+                }
+                setInterval(checkHeadsetActivity, 1000); 
+
+                // Establish Render Variables
+
+                const videoFrameRate = 25;
+                const videoMaxFrame = 1500;
+                const videoMidFrame = 750;
+                const position = new THREE.Vector3();
+                const tangent = new THREE.Vector3();
+                const lookAt = new THREE.Vector3();
+                let velocity = 0;
+                let progress = 0;
+                const progressSpeed = 5
+                let prevTime = performance.now();
+
+                // Initialize Render Function and Begin Render
+
+                function render() {
+
+                    // Render Only if Everything is Loaded and Activity Check Function Validates 
+
+                    if (allLoaded && animationLoopRunning) {
+
+                        // Update Mixer Based on Clock-Independent Time Delta
+
+                        const time = performance.now();
+                        const delta = time - prevTime;
+                        const dt = clock.getDelta();
+                        if ( mixer ) mixer.update( dt );
+
+                        // Update Water Time Value
+
+                        water.material.uniforms[ 'time' ].value += 1.0 / 60.0;
+
+                        // Adjust Light Intensities Based on Video Progression
+
+                        const currentFrame = Math.round(video.currentTime * videoFrameRate);
+                        const distanceFromMid = Math.abs(currentFrame - videoMidFrame) / videoMidFrame;
+                        const intensityMult = 2
+                        const intensity = (intensityMult - distanceFromMid * intensityMult); 
+                        const inverseMult = 3
+                        const inverseIntensity = distanceFromMid * inverseMult
+                        light.intensity = intensity;
+                        nightLight1.intensity = 1 + inverseIntensity
+                        nightLight2.intensity = 1 + inverseIntensity
+
+                        // Adjust Scene Background Color Based on Video Progression
+
+                        scene.background.setScalar(1 - distanceFromMid);
+
+                        // Update Camera Position
+
+                        progress += velocity * progressSpeed;
+                        progress = progress % 1;
+                        position.copy( curve.getPointAt( progress ) );
+                        position.y += 0.8;
+                        train.position.copy( position ); 
+                        tangent.copy( curve.getTangentAt( progress ) );
+                        velocity -= tangent.y * 0.0000001 * delta;
+                        velocity = Math.max( 0.00004, Math.min( 0.0002, velocity ) );
+                        train.lookAt( lookAt.copy( position ).sub( tangent ) );
+
+                        // Update Time References
+
+                        timeSinceLastCheck += delta;
+                        prevTime = time;
+
+                        // Render
+
+                        renderer.render( scene, camera );
+
+                    }
+
+                    // Render Empty Scene if Previous Checks Aren't Valid (While Continuing to Track Headset Movement)
+
+                    else {
+                        renderer.render( emptyScene, camera );
+                    }
+
+
+                }
+                renderer.setAnimationLoop( render );
+
+                // Add Listener to Adjust the Render Viewport On Window Resize
+
+                window.addEventListener( 'resize', onWindowResize );
+                function onWindowResize() {
+                    camera.aspect = window.innerWidth / window.innerHeight;
+                    camera.updateProjectionMatrix();
+                    renderer.setSize( window.innerWidth, window.innerHeight );
+                }
+
+            });
+
+		</script>
+
+	</body>
+</html>
